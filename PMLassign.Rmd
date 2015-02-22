@@ -1,0 +1,124 @@
+---
+title: "Machine learning On lifting technique"
+output: html_document
+---
+#Summary
+We attempt to form a model which can predict the type of lifting technique used based on sensor data. It is found that a random forest model has an average error of 0.4% when estimated with k folds testing. The final model predicted all observations in the data set correctly.
+
+
+#Introduction
+
+We would like to be able to predict whether, and in which way, an activity is being performed with incorrect technique. We attempt to do this using machine learning on a data set gathered from sensors positioned on the body of several different people as they performed lifts in both correct, and incorrect manners (recorded in the classe variable).
+
+#Cleaning data
+
+We first import the training data, and load all required packages:
+
+```{r cache=TRUE}
+training<-read.csv("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",na.strings=c("","NA"))
+
+library(randomForest)
+library(gbm)
+```
+
+We would now like to clean the data, so that only variables which are not mainly NA's are included:
+
+```{r}
+removeMainlyNA <- function(inputData){
+  inputNames<-names(inputData)
+  outputNames<-NULL
+  length<-length(training[,1])
+  for (name in inputNames){
+    if (sum(is.na(inputData[name]))/length < 0.5){
+      outputNames<-c(outputNames,name)
+    }
+  }
+  inputData[,outputNames]
+}
+
+cleanData<-removeMainlyNA(training)
+
+names(cleanData)
+```
+
+We can see that the first 7 variables remaining do not appear to be relevant, as they contain only timestamp data, user names, and the index of the observation.
+
+```{r}
+cleanData<-cleanData[,8:60]
+```
+
+#Building Model
+
+
+##Cross validation
+
+```{r}
+crossValidate <- function(inputData,repeats,k){
+  length<-length(inputData[,1])
+  sampleSize<-round(length/k)
+  accuracy<-NULL
+  while (repeats != 0){
+    random<-sample(length,size=length)
+    toDo<-k
+    location<-1
+    while (toDo != 0){
+      thing<-random[location:(min(location+sampleSize,length))]
+      train <- inputData[-thing,]
+      test <- inputData[thing,]
+      model<-randomForest(classe~., train)
+      predictions <- predict(model,test)
+      result<-confusionMatrix(predictions,test$classe)
+      accuracy<-c(accuracy,result$overall[1])
+      toDo<-toDo-1
+      location<-location+sampleSize
+    }
+    
+    repeats <- repeats - 1
+  }
+  mean(accuracy)
+}
+
+```
+
+For a balance between accuracy and speed:
+
+```{r}
+accuracy<-crossValidate(cleanData,3,5)
+```
+
+This gives a very high accuracy of 99.6%
+
+##Training
+
+now we can run some a training function on the entire data set, basing "classe" on all other available variables:
+
+```{r cache=TRUE}
+model<-randomForest(classe~., cleanData)
+
+model
+```
+
+
+##Expected Out of sample error
+
+We found that the random forest training method had an average accuracy of 99.6%, and error of 0.4%. The subsets of the data which we trained and tested on were selected randomly, so we would expect the error on the final test set to be reasonably close to this, but a little higher as over fitting is difficult to avoid and has almost certainly occurred.
+
+This is a very low error, so we are happy to use this as our final model
+
+#Testing
+
+```{r}
+test<-read.csv("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",na.strings=c("","NA"))
+```
+
+Now we can predict the test set using the model:
+
+```{r}
+results<-predict(model,test)
+results
+```
+
+##Actual error
+
+All predicted results were found to be correct. This gives a final error of 0%. It is likely that if given a larger set of test data we would find a higher error.
+
